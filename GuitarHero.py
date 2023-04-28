@@ -1,8 +1,6 @@
 from GameSequence import *
 import pygame
 import sys
-import keyboard
-
 
 pygame.init()
 WIDTH = 1000
@@ -14,7 +12,7 @@ pygame.mixer.init()
 pygame.mixer.music.load("ILoveRockNRoll.mp3")
 pygame.mixer.music.set_volume(0.7)
 
-# menu and game images 
+# menu, game, & gameOver images 
 menu = pygame.image.load("images/menu.gif")
 menu = pygame.transform.scale(menu, (WIDTH, HEIGHT))
 gameImg = pygame.image.load("images/background.gif")
@@ -79,34 +77,42 @@ class Lane:
         self.rect = pygame.Rect(self.x, self.y, 60, 60)
 
     def draw(self, screen):
-        pygame.draw.rect(screen, self.color, self.rect, 2)
+       pass
+        # pygame.draw.rect(screen, self.color, self.rect, 2)
 
 
-
-def handle_input(key, lanes):
+def handle_input(key, lanes: Lane):
+    pThres = 30
+    global score
     for lane in lanes:
         if key == lane.key:
-            print(f"Key {key} pressed")
-            # Add logic to check for correct note hit here
-            # you can currently detect the key with a keyboard
+            #print(f"Key {key} pressed")
+            for note in notes:
+                # 590 < 625 and 625 < 660
+                if (lane.y-pThres < note.y < lane.y+pThres):
+                    #print(lane.y-pThres < note.y < lane.y+pThres)
+                    score += 100
+        #print(score)
+            
 
 
 lanes = [
-    Lane(352, 625, pygame.K_0, (128, 128, 128)),
-    Lane(415, 625, pygame.K_1, (128, 128, 128)),
-    Lane(475, 625, pygame.K_2, (128, 128, 128)),
-    Lane(539, 625, pygame.K_3, (128, 128, 128)),
-    Lane(602, 625, pygame.K_4, (128, 128, 128))
+    Lane(352, 625, 49, (128, 128, 128)),
+    Lane(415, 625, 50, (128, 128, 128)),
+    Lane(475, 625, 51, (128, 128, 128)),
+    Lane(539, 625, 52, (128, 128, 128)),
+    Lane(602, 625, 53, (128, 128, 128))
 ]
 
 score = 0 
 notes = []
 spawn_timer = 0
-spawn_rate = 50
+spawn_rate = 60
 
 current_song = song["rockNroll"]
 song_length = len(current_song)
 song_position = 0
+endSong = False
 
 green_button = pygame.image.load("images/greenButton.gif")
 red_button = pygame.image.load("images/redButton.gif")
@@ -115,6 +121,75 @@ blue_button = pygame.image.load("images/blueButton.gif")
 orange_button = pygame.image.load("images/orangeButton.gif")
 
 button_images = [green_button, red_button, yellow_button, blue_button, orange_button]
+
+# Main game LOOP
+def gameLoop():
+    global song_position
+    global song_length
+    global spawn_timer
+    pygame.mixer.music.play()
+    pygame.display.set_caption("Guitar Hero - Game")
+    while True:
+        screen.fill("Black")
+        screen.blit(gameImg, (0,0))
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    pygame.mixer.music.pause()
+                    show_main_menu = True
+                    showMainMenu()
+                    break
+                handle_input(event.key, lanes)
+
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if backButton.input(mousePos):
+                        pygame.mixer.music.pause()
+                        show_main_menu = True
+                        showMainMenu()
+
+        screen.blit(gameImg, (0,0))
+        mousePos = pygame.mouse.get_pos()
+        backButton = Button(image=pygame.image.load("images/blackRect.gif"), pos=(965, 17),
+                        textInput="BACK", font=pygame.font.Font("freesansbold.ttf", 15), baseColor="White", hoverColor="Green")
+        backButton.changeColor(mousePos)
+        backButton.update(screen)
+
+        for lane in lanes:
+            lane.draw(screen)
+
+        if song_position < song_length:
+            current_section = current_song[song_position]
+            if spawn_timer >= current_section["delay"]:
+                spawn_timer = 0
+                song_position += 1
+
+                for note in current_section["notes"]:
+                    lane_num = int(note)-1
+                    if 0 <= lane_num < len(lanes):
+                        new_note = Note(lanes[lane_num].x, 0, lanes[lane_num].color, button_images[lane_num])
+                        notes.append(new_note)
+                    else:
+                        print(f"Warning: Invalid lane number {lane_num} found in song data. Skipping this note.")
+                    if song_length == song_position:
+                        #print(score)
+                        finishGameMenu()
+            else:
+                spawn_timer += clock.get_time()
+
+        for note in notes:
+            note.update()
+            note.draw(screen)
+
+        # Basically where we detect when the notes have reached the limit (around 630pxs)
+        if len(notes) > 0 and notes[0].y > 630:
+            notes.pop(0)
+
+        pygame.display.flip()
+        clock.tick(80)
+
 
 show_main_menu = True
 def showMainMenu():
@@ -145,69 +220,22 @@ def showMainMenu():
                 sys.exit()
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if playButton.input(menuMousePos):
-                    show_main_menu = False
-                    pygame.mixer.music.play()
-                    pygame.display.set_caption("Guitar Hero - Game")
+                    gameLoop()
                 if quitButton.input(menuMousePos):
                     pygame.quit()
                     sys.exit()
         pygame.display.update()
 
+def finishGameMenu():
+    global score
+    pygame.mixer.music.pause()
+    pygame.display.set_caption("Guitar Hero - Game Over")
+    screen.blit(menu, (0,0))
+    overTitle = pygame.font.Font("freesansbold.ttf", 100).render("Game Over!", True, "White")
+    overRect =  overTitle.get_rect(center=(WIDTH/2, 200))
+    scoreTitle = pygame.font.Font("freesansbold.ttf", 80).render(f"Your score is {score}", True, "White")
+    scoreRect = scoreTitle.get_rect(center=(WIDTH/2, 400))
+    screen.blit(overTitle, overRect)
+    screen.blit(scoreTitle, scoreRect)
+
 showMainMenu()
-# Main game LOOP
-while True:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            pygame.quit()
-            sys.exit()
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
-                pygame.mixer.music.pause()
-                show_main_menu = True
-                showMainMenu()
-                break
-            handle_input(event.key, lanes)
-
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-                if backButton.input(mousePos):
-                    pygame.mixer.music.pause()
-                    show_main_menu = True
-                    play = False
-                    showMainMenu()
-
-    screen.blit(gameImg, (0,0))
-    mousePos = pygame.mouse.get_pos()
-    backButton = Button(image=pygame.image.load("images/blackRect.gif"), pos=(965, 17),
-                        textInput="BACK", font=pygame.font.Font("freesansbold.ttf", 15), baseColor="White", hoverColor="Green")
-    backButton.changeColor(mousePos)
-    backButton.update(screen)
-
-    for lane in lanes:
-        lane.draw(screen)
-
-    if song_position < song_length:
-        current_section = current_song[song_position]
-        if spawn_timer >= current_section["delay"]:
-            spawn_timer = 0
-            song_position += 1
-
-            for note in current_section["notes"]:
-                lane_num = int(note)-1
-                if 0 <= lane_num < len(lanes):
-                    new_note = Note(lanes[lane_num].x, 0, lanes[lane_num].color, button_images[lane_num])
-                    notes.append(new_note)
-                else:
-                    print(f"Warning: Invalid lane number {lane_num} found in song data. Skipping this note.")
-        else:
-            spawn_timer += clock.get_time()
-
-    for note in notes:
-        note.update()
-        note.draw(screen)
-
-    # Basically where we detect when the notes have reached the limit (around 630pxs)
-    if len(notes) > 0 and notes[0].y > 630:
-        notes.pop(0)
-
-    pygame.display.flip()
-    clock.tick(60)
